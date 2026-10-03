@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="How much KV cache can you prune before quality degrades?"><title>How much KV cache can you prune before quality degrades?</title>
+<link rel="stylesheet" href="../css/style.css">
+<link rel="icon" href="../favicon.ico" type="image/x-icon">
+<link rel="shortcut icon" href="../favicon.ico" type="image/x-icon">
+<style>
+.article-figure{margin:2rem 0}.article-figure svg{display:block;width:100%;height:auto;background:#fff;border:1px solid var(--border,#dfe4eb)}.article-table{width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:.92rem}.article-table th,.article-table td{text-align:left;padding:.65rem .55rem;border-bottom:1px solid var(--border,#dfe4eb)}.article-table th{font-weight:600}.figure-caption{margin-top:.55rem;color:var(--muted,#687386);font-size:.8rem}
+</style></head>
+<body><div class="page-shell"><a class="skip-link" href="#main-content">Skip to content</a>
+<header class="site-header"><nav class="navbar" aria-label="Primary navigation"><a class="brand" href="../index.html">Adeel Asghar</a><button class="mobile-toggle" type="button" aria-expanded="false" aria-controls="primary-menu" aria-label="Open navigation"><span></span><span></span><span></span></button><ul class="nav-links" id="primary-menu"><li><a class="nav-link" href="../index.html">Home</a></li><li><a class="nav-link" href="../blog.html">Blog</a></li><li><a class="nav-link" href="../contact.html">Contact</a></li></ul></nav></header>
+<main id="main-content"><header class="article-header"><div class="narrow reveal"><p class="eyebrow">LLM Systems · KV Cache</p><h1 class="article-title">How much KV cache can you prune before quality degrades?</h1><p class="article-meta">10 min read</p></div></header>
+<article class="article-body">
+<aside class="article-callout" role="note"><strong>Before reading:</strong> if the KV cache is unfamiliar, read a short explanation of caching. It explains why an LLM stores keys and values from earlier tokens instead of recalculating them for every new token.</aside>
+<p>During inference, an LLM first processes the prompt and then enters decode, where it generates one new token at a time. For every decoded token, the attention layers have already calculated key and value vectors for earlier tokens. The KV cache stores those vectors so the model can reuse them instead of calculating the complete history again for every new token. Each decoded token adds another set of key and value entries to the cache.</p>
+<p>This makes the cache grow with context. Longer caches require more GPU memory, and each new decode step must read those stored vectors. On memory-constrained GPUs the KV cache can therefore become a practical limit on context length even when the model weights themselves fit in memory.</p>
+<p>One possible solution is to remove old cache entries that appear less useful. That saves memory and attention work, but removing the wrong tokens can make the model worse at predicting what comes next. The question was: how much KV cache can we remove before quality meaningfully degrades, and how much memory and speed do we recover?</p>
+<h2>Why this matters</h2>
+<p>Long contexts can exhaust GPU memory even when the model itself fits. They can also make every new token slower. A useful pruning policy has to balance three outcomes: prediction quality, live KV memory, and decode speed.</p>
+<h2>What we did</h2>
+<p>I tested a small causal language model on one GPU and implemented two policies using a Hugging Face-style cache interface.</p>
+<ul><li><strong>Sinks plus recent window:</strong> keep the first few tokens and use the rest of the budget for the newest tokens. The first tokens are retained because they can act as attention sinks, meaning later tokens may continue attending to them even when they are not recent.</li><li><strong>Attention score plus recent tokens:</strong> keep a small set of early tokens, always keep the newest window, and fill the remaining space with older tokens that received the most attention. The policy assumes past attention may help identify future usefulness.</li></ul>
+<p>For quality, I warmed up the model on a fixed token prefix, then measured perplexity over the following predictions. Lower perplexity is better because it means the model is less uncertain about the correct next token.</p>
+<h2>Recent windows: one-third less cache, nearly unchanged quality</h2>
+<p>A recent-window budget produced almost the same perplexity as the full cache until the retained-token budget became noticeably smaller. The first measurable quality cost appeared once the retained region was reduced far enough to remove more of the long-range context.</p>
+<table class="article-table"><thead><tr><th>Retained tokens</th><th>Quality trend</th><th>KV memory</th><th>Memory saving</th></tr></thead><tbody>
+<tr><td>Full cache</td><td>Baseline</td><td>100%</td><td>0%</td></tr><tr><td>~3/4 cache</td><td>Nearly unchanged</td><td>~75%</td><td>~25%</td></tr><tr><td>~1/2 cache</td><td>Small degradation</td><td>~50%</td><td>~50%</td></tr><tr><td>Small window</td><td>Clearer degradation</td><td>Much lower</td><td>Large</td></tr>
+</tbody></table>
+<figure class="article-figure"><svg viewBox="0 0 760 330" role="img" aria-label="Perplexity versus retained KV cache tokens"><line x1="80" y1="275" x2="700" y2="275" stroke="#cfd6df"/><line x1="80" y1="35" x2="80" y2="275" stroke="#cfd6df"/><polyline points="100,70 220,110 340,155 460,205 580,235 680,260" fill="none" stroke="#5d748e" stroke-width="4"/><polyline points="100,120 220,155 340,185 460,220 580,245 680,265" fill="none" stroke="#9aa7b7" stroke-width="4"/><text x="95" y="305" font-size="14" fill="#687386">retained KV tokens →</text><text x="95" y="53" font-size="14" fill="#687386">perplexity</text></svg><figcaption class="figure-caption">Recent-window pruning preserved quality better than aggressively shrinking the cache.</figcaption></figure>
+<h2>Attention scores did not improve perplexity</h2>
+<p>The attention-score policy kept older tokens that had received more attention in the past. This sounds reasonable, but past attention did not predict future usefulness better than recency on this continuous-text stream.</p>
+<p>This does not show that attention-guided pruning is universally wrong. A prompt that repeatedly references an important early token could benefit from retaining it. The result here is narrower: for this workload, the simple recency policy was a stronger signal than the single attention heuristic we tested.</p>
+<h2>Bounded windows: memory and decode-time impact</h2>
+<p>The full cache grew with every decoded token because each layer stored key and value vectors for that token. Once a bounded window reached its budget, live memory stopped growing because each new entry replaced an old one. The model also avoided reading the complete history at every attention step, so decode time became more stable.</p>
+<table class="article-table"><thead><tr><th>Context</th><th>Cache behavior</th><th>Expected effect</th></tr></thead><tbody><tr><td>Full history</td><td>Memory grows with tokens</td><td>Decode work increases</td></tr><tr><td>Recent window</td><td>Fixed live memory</td><td>More stable decode cost</td></tr><tr><td>Small budget</td><td>Lower memory</td><td>Higher risk of quality loss</td></tr></tbody></table>
+<p>Pruning also has a small implementation cost when selecting and copying cache entries into a new layout. On long contexts, the saved attention work can outweigh that overhead; on short contexts, the extra bookkeeping can become a larger fraction of the runtime.</p>
+<h2>Conclusion</h2>
+<p>KV-cache pruning had a useful middle region in this experiment. A recent window removed a substantial part of the cache while preserving quality relatively well. Smaller budgets saved more memory and could stabilize decode work, but perplexity worsened more quickly.</p>
+<p>The practical choice depends on whether quality, maximum context, or decode speed matters most. The workload here is one continuous test stream, so the results should not be treated as a universal cache policy. A production implementation should measure the quality of its own traffic and account for the overhead of selecting, copying, and managing cache blocks.</p>
+<a class="article-footer-link" href="../blog.html">← All posts</a>
+</article></main>
+</div><script src="../js/script.js"></script></body></html>

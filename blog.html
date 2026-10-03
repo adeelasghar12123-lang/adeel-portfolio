@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Notes and experiments on AI engineering, LLM systems, and software performance.">
+    <title>Blog — Adeel Asghar</title>
+    <link rel="icon" href="./favicon.ico" type="image/x-icon">
+<link rel="shortcut icon" href="./favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page-shell">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+        <nav class="navbar" aria-label="Primary navigation">
+            <!-- Change your name here. -->
+            <a class="brand" href="index.html">Adeel Asghar</a>
+            <button class="mobile-toggle" type="button" aria-expanded="false" aria-controls="primary-menu" aria-label="Open navigation">
+                <span></span><span></span><span></span>
+            </button>
+            <ul class="nav-links" id="primary-menu">
+                <li><a class="nav-link" href="index.html">Home</a></li>
+                <li><a class="nav-link" href="blog.html">Blog</a></li>
+                <li><a class="nav-link" href="contact.html">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main id="main-content">
+        <section class="page-intro">
+            <div class="container reveal">
+                <p class="eyebrow">Writing &amp; Experiments</p>
+                <h1 class="page-title">Blog</h1>
+                <p class="page-lede">As I learn more about these areas, I publish articles here to explain what I’m learning and share findings from my experiments.</p>
+            </div>
+        </section>
+
+        <!-- =========================
+             BLOG ARTICLE INDEX
+             To add an article, duplicate one .blog-item and update:
+             title, description, reading time, and href.
+        ========================= -->
+        <section class="section" style="padding-top: 0;">
+            <div class="container">
+                <div class="blog-list">
+                    <a class="blog-item reveal" href="articles/blog-quantization-sparsity.html">
+                        <div>
+                            <h2 class="blog-title">Do Quantization and Sparsity make LLM Inference Faster?</h2>
+                            <p class="blog-description">Smaller weights create an opportunity for faster inference, but the kernel, matrix size, and batch size determine whether that opportunity becomes real speed.</p>
+                            <p class="blog-meta">12 min read</p>
+                        </div>
+                        <span class="blog-arrow" aria-hidden="true">→</span>
+                    </a>
+
+                    <a class="blog-item reveal" href="articles/blog-energy-llm.html">
+                        <div>
+                            <h2 class="blog-title">Measuring Energy Use in LLM Inference</h2>
+                            <p class="blog-description">A small experiment exploring how model size, batching, and GPU utilization affect energy consumption during inference.</p>
+                            <p class="blog-meta">8 min read</p>
+                        </div>
+                        <span class="blog-arrow" aria-hidden="true">→</span>
+                    </a>
+
+                    <a class="blog-item reveal" href="articles/blog-kv-cache.html">
+                        <div>
+                            <h2 class="blog-title">How much KV cache can you prune before quality degrades?</h2>
+                            <p class="blog-description">An experiment exploring how aggressively KV cache can be reduced before long-context quality begins to change.</p>
+                            <p class="blog-meta">10 min read</p>
+                        </div>
+                        <span class="blog-arrow" aria-hidden="true">→</span>
+                    </a>
+
+                    <a class="blog-item reveal" href="articles/blog-serving-performance.html">
+                        <div>
+                            <h2 class="blog-title">Measuring LLM Serving Performance Under Load</h2>
+                            <p class="blog-description">Exploring first-token latency, decode latency, throughput, and why average request time is not enough for capacity planning.</p>
+                            <p class="blog-meta">9 min read</p>
+                        </div>
+                        <span class="blog-arrow" aria-hidden="true">→</span>
+                    </a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <span>© 2026 Your Name</span>
+            <span>Built with HTML, CSS &amp; JavaScript.</span>
+            <nav class="footer-links" aria-label="Footer navigation">
+                <a href="index.html">Home</a>
+                <a href="blog.html">Blog</a>
+                <a href="contact.html">Contact</a>
+            </nav>
+        </div>
+    </footer>
+</div>
+<script src="js/script.js"></script>
+</body>
+</html>

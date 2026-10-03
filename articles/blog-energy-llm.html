@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Measuring Energy Use in LLM Inference"><title>Measuring Energy Use in LLM Inference</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="icon" href="../favicon.ico" type="image/x-icon">
+<link rel="shortcut icon" href="../favicon.ico" type="image/x-icon">
+    <style>
+        .article-figure{margin:2rem 0}.article-figure svg{display:block;width:100%;height:auto;background:#fff;border:1px solid var(--border,#dfe4eb)}
+        .article-table{width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:.92rem}.article-table th,.article-table td{text-align:left;padding:.65rem .55rem;border-bottom:1px solid var(--border,#dfe4eb);vertical-align:top}.article-table th{font-weight:600}.figure-caption{margin-top:.55rem;color:var(--muted,#687386);font-size:.8rem}
+    </style>
+</head>
+<body>
+<div class="page-shell">
+<a class="skip-link" href="#main-content">Skip to content</a>
+<header class="site-header"><nav class="navbar" aria-label="Primary navigation">
+<a class="brand" href="../index.html">Adeel Asghar</a><button class="mobile-toggle" type="button" aria-expanded="false" aria-controls="primary-menu" aria-label="Open navigation"><span></span><span></span><span></span></button>
+<ul class="nav-links" id="primary-menu"><li><a class="nav-link" href="../index.html">Home</a></li><li><a class="nav-link" href="../blog.html">Blog</a></li><li><a class="nav-link" href="../contact.html">Contact</a></li></ul>
+</nav></header>
+<main id="main-content">
+<header class="article-header"><div class="narrow reveal"><p class="eyebrow">AI Systems · Efficiency</p><h1 class="article-title">Measuring Energy Use in LLM Inference</h1><p class="article-meta">8 min read</p></div></header>
+<article class="article-body">
+<aside class="article-callout" role="note"><strong>Before reading:</strong> this article uses terms such as prefill, decode, and batching. If they are unfamiliar, start with NVIDIA's introduction to LLM inference first.</aside>
+<p>Power and energy are easy to confuse. Power is how quickly the GPU uses energy at one moment, measured in watts. Energy is the total amount used over time, measured in joules. When running a model, one quantization format or inference engine can make the GPU draw fewer watts but take longer to generate the same tokens. Because energy depends on both power and runtime, the lower-power option can still use more energy for each token.</p>
+<p>An active GPU also draws power while it is doing no useful work. I call this the idle floor. Whether we charge that idle power to a request changes how we interpret the same measurement. The question was: how do engine choice, quantization, batching, and the idle floor change the energy cost of each generated token?</p>
+<h2>Why this matters</h2>
+<p>Tokens per second tells us how fast a system is, but not how much energy it uses to produce each token. The electricity and cooling required for inference affect operating cost and environmental impact.</p>
+<p>A faster configuration is not necessarily more sustainable if it uses much more energy for each useful token. A lower-power configuration is not necessarily better either if it runs for much longer. Datacenters need this distinction when choosing hardware and serving systems; local AI systems feel it through battery, heat, and electricity constraints.</p>
+<h2>What we did</h2>
+<p>I measured Qwen 2.5 1.5B inference on an RTX 3060 12 GB GPU. At batch 1, I compared Hugging Face FP16, Hugging Face NF4, and vLLM FP16. I then tested vLLM at batches from 1 to 128.</p>
+<p>During decode, the GPU repeatedly transfers model weights from its memory and uses them to generate the next token. Transferring more data generally requires more energy, so quantization can reduce power by reducing the number of bytes moved. However, total energy also depends on how long the kernel takes to finish. That is why I measured both power and execution time instead of assuming that fewer transferred bytes automatically meant lower energy per token.</p>
+<p>The primary measurement was NVIDIA's total-energy counter. It records how many joules the GPU consumes, so the difference between the start and end readings gives the energy used by a run. I also sampled board power as a cross-check. Across the short measurement windows, the two methods closely agreed. The model's idle floor remained in the tens of watts after the GPU had settled.</p>
+<h2>FP16 versus NF4: lower power did not mean lower gross energy</h2>
+<p>NF4 moved fewer weight bytes, which reduced board power. However, that bandwidth reduction came with additional execution time. The idle floor therefore remained active for longer while each token was generated. Gross energy per token reflects both effects.</p>
+<table class="article-table"><thead><tr><th>Batch-1 measurement</th><th>FP16</th><th>NF4</th><th>Interpretation</th></tr></thead><tbody>
+<tr><td>Throughput</td><td>Higher</td><td>Lower</td><td>NF4 spent longer generating the same work</td></tr>
+<tr><td>Board power</td><td>Higher</td><td>Lower</td><td>Fewer weight bytes reduced active power</td></tr>
+<tr><td>Gross energy/token</td><td>Baseline</td><td>Higher</td><td>Runtime offset the power saving</td></tr>
+</tbody></table>
+<figure class="article-figure"><svg viewBox="0 0 760 330" role="img" aria-label="Energy per token compared across configurations and sequence lengths"><line x1="80" y1="275" x2="700" y2="275" stroke="#cfd6df"/><line x1="80" y1="35" x2="80" y2="275" stroke="#cfd6df"/><polyline points="100,70 180,130 260,180 340,210 420,235 500,245 580,252 660,258" fill="none" stroke="#5d748e" stroke-width="4"/><polyline points="100,105 180,155 260,195 340,220 420,240 500,248 580,255 660,261" fill="none" stroke="#9aa7b7" stroke-width="4"/><text x="90" y="305" font-size="14" fill="#687386">batch / sequence length →</text><text x="90" y="55" font-size="14" fill="#687386">gross energy per token</text></svg><figcaption class="figure-caption">Energy per token falls as fixed GPU work is spread over more useful generated tokens.</figcaption></figure>
+<h2>Gross versus net energy, in simple terms</h2>
+<p><strong>Use gross energy</strong> when the GPU is running specifically to complete a job and may be turned off afterward. Gross energy includes everything the GPU used while the job was running.</p>
+<p><strong>Use net energy</strong> when the GPU will remain powered on anyway. Net energy subtracts the energy the idle GPU would have consumed during the same time, estimating the additional energy attributable to inference.</p>
+<p>This distinction changes the interpretation of the NF4 result. Because NF4 took longer, it accumulated more gross idle energy. After subtracting the idle floor, its lower active power became more visible in the net measure.</p>
+<h2>vLLM at batch 1: more speed also required more power</h2>
+<p>vLLM was substantially faster than the Hugging Face FP16 path at batch 1, but it also kept the GPU busier. The measured board power was higher. The combination still reduced gross energy per token because the speed improvement was large enough to compensate for the power increase.</p>
+<h2>Batching: the largest energy improvement</h2>
+<p>A decode step reads the same weights whether it advances one sequence or many. With batching, many sequences share each weight read. That makes fixed GPU work serve more tokens.</p>
+<table class="article-table"><thead><tr><th>Batch</th><th>Throughput</th><th>Board power</th><th>Gross energy/token</th></tr></thead><tbody>
+<tr><td>1</td><td>Low</td><td>Moderate</td><td>Highest</td></tr><tr><td>8</td><td>Much higher</td><td>Higher</td><td>Lower</td></tr><tr><td>32</td><td>Higher again</td><td>Near a plateau</td><td>Much lower</td></tr><tr><td>128</td><td>Highest</td><td>Near the same range</td><td>Lowest</td></tr>
+</tbody></table>
+<p>Board power stayed within a relatively narrow range across the complete sweep while throughput increased by many times. Energy per token therefore fell dramatically. The gains began to flatten as the GPU approached its compute limit.</p>
+<h2>Conclusion</h2>
+<p>Lower power did not guarantee lower energy per token. NF4 drew less power, but its slower batch-1 execution increased gross energy because the idle floor remained active for longer. vLLM improved gross efficiency by completing work faster even while using more board power.</p>
+<p>The clearest improvement came from batching because it spread nearly fixed GPU work across many more tokens. These results apply to one GPU, one model, and the measured software versions; they are not a universal energy ranking for inference systems.</p>
+<a class="article-footer-link" href="../blog.html">← All posts</a>
+</article></main>
+</div><script src="../js/script.js"></script>
+</body></html>

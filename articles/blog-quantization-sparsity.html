@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Do Quantization and Sparsity make LLM Inference Faster?">
+    <title>Do Quantization and Sparsity make LLM Inference Faster?</title>
+    <link rel="icon" href="../favicon.ico" type="image/x-icon">
+<link rel="shortcut icon" href="../favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="../css/style.css">
+
+    <style>
+        .article-figure{margin:2rem 0}.article-figure svg{display:block;width:100%;height:auto;background:#fff;border:1px solid var(--border,#dfe4eb)}
+        .article-table{width:100%;border-collapse:collapse;margin:1.5rem 0;font-size:.92rem}.article-table th,.article-table td{text-align:left;padding:.65rem .55rem;border-bottom:1px solid var(--border,#dfe4eb);vertical-align:top}.article-table th{font-weight:600}.code-block{overflow:auto;background:#f1f4f7;border:1px solid var(--border,#dfe4eb);padding:1rem 1.1rem;font: .82rem/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre}
+        .figure-caption{margin-top:.55rem;color:var(--muted,#687386);font-size:.8rem}
+    </style>
+</head>
+<body>
+<div class="page-shell">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+        <nav class="navbar" aria-label="Primary navigation">
+            <a class="brand" href="../index.html">Adeel Asghar</a>
+            <button class="mobile-toggle" type="button" aria-expanded="false" aria-controls="primary-menu" aria-label="Open navigation"><span></span><span></span><span></span></button>
+            <ul class="nav-links" id="primary-menu">
+                <li><a class="nav-link" href="../index.html">Home</a></li>
+                <li><a class="nav-link" href="../blog.html">Blog</a></li>
+                <li><a class="nav-link" href="../contact.html">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main id="main-content">
+        <header class="article-header">
+            <div class="narrow reveal">
+                <p class="eyebrow">AI Systems · Inference</p>
+                <h1 class="article-title">Do Quantization and Sparsity make LLM Inference Faster?</h1>
+                <p class="article-meta">12 min read</p>
+            </div>
+        </header>
+
+        <article class="article-body">
+            <aside class="article-callout" role="note">
+                <strong>Before reading:</strong> this article assumes a basic understanding of Transformer inference, including attention, Q/K/V projections, model weights, and decode. If those concepts are unfamiliar, start with a short Transformer overview first.
+            </aside>
+
+            <p>Quantization and sparsity are attractive because they appear to reduce the amount of work an inference system has to do. Quantization stores weights using fewer bits; sparsity removes or skips selected values. In both cases, the model representation becomes smaller.</p>
+            <p>That does not automatically mean the end-to-end system becomes faster. The result depends on the kernel, the matrix shape, memory traffic, batch size, and whether the hardware can actually exploit the compressed representation.</p>
+            <p>The question for this experiment was simple: when does a smaller representation turn into measurable inference improvement, and when does it only change the model's memory footprint?</p>
+
+            <h2>Why this matters</h2>
+            <p>Lower precision can reduce memory movement and may unlock specialized hardware paths. Sparsity can reduce arithmetic work when the execution stack knows how to skip the values efficiently. But if the runtime has to unpack values, convert layouts, or execute an unsupported kernel, part of the theoretical gain can disappear.</p>
+            <p>For practical engineering, the useful metric is therefore not compression ratio by itself. It is the latency, throughput, and resource use of the complete serving path.</p>
+
+            <h2>What we did</h2>
+            <p>I compared several representations of the same model and looked at the metrics that matter for inference rather than only looking at model size.</p>
+            <ul>
+                <li>Compared higher-precision and lower-precision weight representations.</li>
+                <li>Looked at memory traffic and execution time separately.</li>
+                <li>Considered different workload sizes instead of relying on a single batch.</li>
+                <li>Checked sparse and dense execution paths as separate cases.</li>
+                <li>Focused on end-to-end inference behavior, not only an isolated kernel.</li>
+            </ul>
+
+            <figure class="article-figure">
+                <svg viewBox="0 0 760 280" role="img" aria-label="Illustrative comparison of inference time, memory traffic, and throughput across model representations">
+                    <rect x="55" y="20" width="660" height="210" fill="#ffffff"/>
+                    <line x1="70" y1="230" x2="710" y2="230" stroke="#cfd6df"/>
+                    <line x1="70" y1="35" x2="70" y2="230" stroke="#cfd6df"/>
+                    <rect x="120" y="120" width="55" height="110" fill="#8795a8"/><rect x="190" y="95" width="55" height="135" fill="#bcc6d2"/><rect x="260" y="140" width="55" height="90" fill="#5d748e"/>
+                    <rect x="370" y="90" width="55" height="140" fill="#8795a8"/><rect x="440" y="125" width="55" height="105" fill="#bcc6d2"/><rect x="510" y="75" width="55" height="155" fill="#5d748e"/>
+                    <rect x="590" y="65" width="55" height="165" fill="#8795a8"/><rect x="660" y="112" width="45" height="118" fill="#bcc6d2"/>
+                    <text x="118" y="255" font-size="14" fill="#687386">baseline</text><text x="365" y="255" font-size="14" fill="#687386">quantized</text><text x="585" y="255" font-size="14" fill="#687386">sparse</text>
+                    <text x="95" y="48" font-size="14" fill="#687386">relative cost</text>
+                    <text x="505" y="45" font-size="13" fill="#687386">execution depends on the kernel</text>
+                </svg>
+                <figcaption class="figure-caption">Conceptual view of the trade-off: a smaller representation is useful only when the execution path can exploit it efficiently.</figcaption>
+            </figure>
+
+            <h2>Does FP16 give the best baseline?</h2>
+            <p>A higher-precision representation is a useful baseline because it tells us what the uncompressed execution path looks like. It also makes it easier to separate two different effects: less memory traffic and less actual execution time.</p>
+            <table class="article-table">
+                <thead><tr><th>Representation</th><th>Weight size</th><th>Potential benefit</th></tr></thead>
+                <tbody>
+                    <tr><td>FP16</td><td>Baseline</td><td>Wide kernel support and predictable execution</td></tr>
+                    <tr><td>INT8</td><td>Smaller</td><td>Lower weight traffic when an efficient integer path is available</td></tr>
+                    <tr><td>INT4</td><td>Much smaller</td><td>Strong memory reduction, but more dependence on supported kernels</td></tr>
+                </tbody>
+            </table>
+
+            <h2>INT8: fewer bytes do not automatically mean fewer milliseconds</h2>
+            <p>INT8 can reduce the number of bytes moved from memory. That can matter when decode is limited by memory bandwidth. But the runtime may also need additional conversion, packing, or specialized kernels, so the observed speedup can be smaller than the reduction in weight size.</p>
+            <p>This is why the experiment measures both memory-related effects and wall-clock latency. A memory optimization is valuable, but the user experiences the full request path.</p>
+
+            <h2>INT4: the representation gets smaller, the implementation matters more</h2>
+            <p>Moving from 8-bit to 4-bit weights increases the opportunity to reduce memory traffic even further. The trade-off is that the runtime has less room to hide implementation overhead. Efficient fused kernels and compatible hardware can turn the smaller representation into a useful speedup; otherwise, some of the benefit remains theoretical.</p>
+            <table class="article-table">
+                <thead><tr><th>Question</th><th>What to measure</th></tr></thead>
+                <tbody>
+                    <tr><td>Did memory use fall?</td><td>Peak and steady-state GPU memory</td></tr>
+                    <tr><td>Did decode get faster?</td><td>Per-token decode latency</td></tr>
+                    <tr><td>Did throughput improve?</td><td>Tokens/sec across multiple batch sizes</td></tr>
+                    <tr><td>Did the implementation add overhead?</td><td>Kernel time and conversion time</td></tr>
+                </tbody>
+            </table>
+
+            <h2>Why 2:4 sparsity is easier to use than arbitrary sparsity</h2>
+            <p>Unstructured sparsity can produce many zeros without imposing a regular layout, but irregular access can make those zeros difficult to exploit efficiently. Structured sparsity gives the hardware and kernels a predictable pattern, which makes the reduction in work easier to schedule.</p>
+            <p>The practical lesson is that sparsity needs a matching execution strategy. A sparse model is not automatically a sparse computation.</p>
+
+            <h2>Measure the end-to-end system, not just the model</h2>
+            <p>For serving workloads, the right experiment separates prefill and decode, reports throughput at more than one batch size, and measures latency at the request level. It is also useful to record peak memory and the variance between repeated runs.</p>
+            <pre class="code-block"><code># The important measurement is the complete request path.
+start = perf_counter()
+output = engine.generate(prompt, max_new_tokens=128)
+elapsed = perf_counter() - start
+
+latency_per_token = elapsed / len(output.tokens)
+tokens_per_second = len(output.tokens) / elapsed</nprint(latency_per_token, tokens_per_second)</code></pre>
+
+            <h2>Conclusion</h2>
+            <p>Quantization and sparsity change the amount and structure of computation, but neither one guarantees faster LLM inference by itself. The result depends on the interaction between the model representation, the kernels, the hardware, and the workload.</p>
+            <p>The most useful benchmark therefore reports the actual serving behavior: latency, throughput, memory, and the conditions under which each optimization was measured. Compression is an input to the optimization problem; end-to-end performance is the result.</p>
+
+           
+            <a class="article-footer-link" href="../blog.html">← All posts</a>
+        </article>
+    </main>
+
+
+</div>
+<script src="../js/script.js"></script>
+</body>
+</html>

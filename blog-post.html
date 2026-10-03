@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Sample editorial article page template for the portfolio blog.">
+    <title>Blog Article — Adeel Asghar</title>
+    <link rel="icon" href="./favicon.ico" type="image/x-icon">
+<link rel="shortcut icon" href="./favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="page-shell">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="site-header">
+        <nav class="navbar" aria-label="Primary navigation">
+            <!-- Change your name here. -->
+            <a class="brand" href="index.html">Your Name</a>
+            <button class="mobile-toggle" type="button" aria-expanded="false" aria-controls="primary-menu" aria-label="Open navigation">
+                <span></span><span></span><span></span>
+            </button>
+            <ul class="nav-links" id="primary-menu">
+                <li><a class="nav-link" href="index.html">Home</a></li>
+                <li><a class="nav-link" href="blog.html">Blog</a></li>
+                <li><a class="nav-link" href="contact.html">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main id="main-content">
+        <header class="article-header">
+            <div class="narrow reveal">
+                <p class="eyebrow">Sample Article</p>
+                <h1 class="article-title">Do Quantization and Sparsity make LLM Inference Faster?</h1>
+                <p class="article-meta">12 min read · Replace with date</p>
+            </div>
+        </header>
+
+        <!-- =========================
+             REUSABLE ARTICLE TEMPLATE
+             Duplicate this file for future articles, then change
+             title, metadata, callout, and article body.
+        ========================= -->
+        <article class="article-body">
+            <aside class="article-callout" role="note">
+                <strong>Before reading</strong>
+                This sample article assumes that you understand the basic shape of a Transformer. If concepts such as attention, Q/K/V projections, MLP layers, or decode are unfamiliar, start with a short Transformer overview first.
+            </aside>
+
+            <p>Smaller model weights create an obvious opportunity: move less data, use less memory, and potentially perform fewer expensive operations. But model compression does not automatically translate into a faster end-to-end system.</p>
+
+            <p>In practice, the result depends on how the compressed representation maps onto the actual inference stack. Kernel support, matrix dimensions, memory bandwidth, batch size, and the shape of the workload all influence whether an optimization becomes measurable latency improvement.</p>
+
+            <h2>Quantization changes the representation</h2>
+            <p>Quantization reduces the numerical precision used to represent model weights or activations. A lower-precision representation can reduce memory traffic and, on compatible hardware, unlock specialized compute paths.</p>
+
+            <p>That sounds straightforward until we ask a practical question: what is the bottleneck for this workload? If a model is compute-bound and the target hardware has efficient low-precision kernels, quantization can create a meaningful speedup. If the workload is dominated by memory movement or unsupported operations, the reduction in weight size may show up mainly as lower memory use instead.</p>
+
+            <h2>Sparsity is different</h2>
+            <p>Sparsity removes or ignores selected parameters, activations, or intermediate values. Conceptually, this should reduce work. Operationally, the system still needs a way to exploit the zeros or skipped regions efficiently.</p>
+
+            <p>Unstructured sparsity is especially tricky because irregular memory access can erase some of the theoretical savings. Structured sparsity is easier for hardware and kernels to reason about, but it imposes stronger constraints on how the model is compressed.</p>
+
+            <h2>A useful measurement checklist</h2>
+            <ul>
+                <li>Measure first-token latency separately from decode latency.</li>
+                <li>Record throughput at more than one batch size.</li>
+                <li>Track peak memory and memory bandwidth where possible.</li>
+                <li>Compare kernels and hardware paths, not only model-level settings.</li>
+                <li>Repeat measurements enough times to see variance.</li>
+            </ul>
+
+            <h2>The practical conclusion</h2>
+            <p>The important lesson is not that quantization or sparsity is inherently fast or slow. The result depends on the interaction between the compressed model, the kernels that execute it, the hardware underneath, and the workload you actually care about.</p>
+
+            <blockquote>Optimization is only real when the system you measure gets better—not merely the model representation.</blockquote>
+
+            <p>That is why a useful performance experiment should report the setup clearly enough that another engineer could reproduce it. Compression ratio alone is not a performance result.</p>
+
+            <a class="article-footer-link" href="blog.html">← Back to all articles</a>
+        </article>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container footer-inner">
+            <span>© 2026 Your Name</span>
+            <span>Built with HTML, CSS &amp; JavaScript.</span>
+            <nav class="footer-links" aria-label="Footer navigation">
+                <a href="index.html">Home</a>
+                <a href="blog.html">Blog</a>
+                <a href="contact.html">Contact</a>
+            </nav>
+        </div>
+    </footer>
+</div>
+<script src="js/script.js"></script>
+</body>
+</html>
